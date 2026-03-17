@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gist-api-deployment
+  labels:
+    app: gist-api
+spec:
+  # Senior SRE Best Practice: Run 3 replicas for High Availability (HA)
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gist-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Update karte waqt 1 extra pod allowed hai
+      maxUnavailable: 0  # Update karte waqt koi bhi pod down nahi hona chahiye
+  template:
+    metadata:
+      labels:
+        app: gist-api
+    spec:
+      containers:
+      - name: gist-api
+        # Note: Production mein ye "ghcr.io/username/repo:tag" hoga
+        image: gist-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        
+        # --- Observability & Self-Healing (The "Senior" Part) ---
+        
+        # Liveness Probe: "Kya tum zinda ho?" (Agar nahi, to Restart karega)
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          
+        # Readiness Probe: "Kya tum traffic lene ko taiyaar ho?" (Agar nahi, to Traffic nahi bhejega)
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          
+        # Resource Limits: "Padosi ka khana mat khao" (Prevent Resource Starvation)
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+            
+        env:
+        - name: PORT
+          value: "8080"

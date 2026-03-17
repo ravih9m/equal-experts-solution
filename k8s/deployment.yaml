@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gist-api-deployment
+  labels:
+    app: gist-api
+spec:
+  # Run 3 replicas for High Availability (HA)
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gist-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # 1 extra pod allowed during update  
+      maxUnavailable: 0  # No pod should be down during update
+  template:
+    metadata:
+      labels:
+        app: gist-api
+    spec:
+      containers:
+      - name: gist-api
+        # Note: For Production  "ghcr.io/username/repo:tag" 
+        image: gist-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        
+        # --- Observability & Self-Healing (The "Senior" Part) ---
+        
+        # Liveness Probe: "Restart if not live"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          
+        # Readiness Probe: "Ready to accept traffic"
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          
+        # Resource Limits: "Prevent Resource Starvation"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+            
+        env:
+        - name: PORT
+          value: "8080"
