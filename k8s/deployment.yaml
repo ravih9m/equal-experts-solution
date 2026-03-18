@@ -23,7 +23,7 @@ spec:
       containers:
       - name: gist-api
         # Note: For Production  "ghcr.io/username/repo:tag" 
-        image: ghcr.io/ravih9m/gist-api:306d786bd37c3a27363e3f82500f7358788c1ac0
+        image: ghcr.io/ravih9m/gist-api:fa5cb56c0e06b387d65b5c28654d9d4d0d8a2395
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
