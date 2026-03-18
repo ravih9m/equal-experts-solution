@@ -1,0 +1,99 @@
+name: CI/CD to GitOps (ArgoCD)
+
+# This workflow triggers on pushes to your main branch and your current working branch
+on:
+  push:
+    branches:
+      - main
+      - enable-agro
+
+# Define environment variables
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/gist-api
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip' # Speeds up builds by caching dependencies
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pytest
+        run: |
+          pytest tests/unit/ -v
+
+  build-and-push:
+    name: Build and Push Docker Image
+    needs: test # Only runs if the 'test' job passes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Required to push to GitHub Container Registry
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # Tags the image with both the Git commit SHA (for GitOps) and 'latest'
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  update-manifest:
+    name: Update K8s Manifest for ArgoCD
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to commit the updated deployment.yaml back to the repo
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Update Kubernetes Deployment YAML
+        run: |
+          # Replaces the generic 'image: gist-api:latest' with the newly built GHCR image and exact commit SHA
+          NEW_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          # Using lower case for the image name to avoid docker pull issues with uppercase characters
+          NEW_IMAGE=$(echo $NEW_IMAGE | tr '[:upper:]' '[:lower:]')
+          
+          sed -i "s|image: .*|image: $NEW_IMAGE|g" k8s/deployment.yaml
+          
+          echo "Updated k8s/deployment.yaml with image: $NEW_IMAGE"
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add k8s/deployment.yaml
+          # If there are no changes, this will just gracefully exit without failing
+          git commit -m "chore(cd): update image tag to ${{ github.sha }} [skip ci]" || echo "No changes to commit"
+          git push
