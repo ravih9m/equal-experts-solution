@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gist-api
+  # This must be deployed in the argocd namespace
+  namespace: argocd 
+spec:
+  project: default
+  source:
+    # Your GitHub repository URL
+    repoURL: 'https://github.com/ravih9m/equal-experts-solution.git'
+    # The folder where your deployment.yaml and service.yaml live
+    path: k8s
+    # The branch ArgoCD should watch (change to enable-agro if you are still working on that branch)
+    targetRevision: main 
+  destination:
+    # Deploys to the local cluster ArgoCD is running on
+    server: 'https://kubernetes.default.svc'
+    # Deploys your app into the default namespace
+    namespace: default
+  syncPolicy:
+    automated:
+      # Automatically delete K8s resources if you delete them from GitHub
+      prune: true
+      # Automatically fix K8s resources if someone manually edits them in the cluster
+      selfHeal: true
