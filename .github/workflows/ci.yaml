@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Pytest
         run: |
-          pytest tests/unit/ -v
+          PYTHONPATH=. pytest tests/unit/ -v
 
   build-and-push:
     name: Build and Push Docker Image
