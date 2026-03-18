@@ -1,13 +1,11 @@
 name: CI/CD to GitOps (ArgoCD)
 
-# This workflow triggers on pushes to your main branch and your current working branch
 on:
   push:
     branches:
       - main
       - enable-agro
 
-# Define environment variables
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/gist-api
@@ -24,7 +22,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: 'pip' # Speeds up builds by caching dependencies
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -37,11 +35,11 @@ jobs:
 
   build-and-push:
     name: Build and Push Docker Image
-    needs: test # Only runs if the 'test' job passes
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # Required to push to GitHub Container Registry
+      packages: write
 
     steps:
       - name: Checkout code
@@ -59,7 +57,6 @@ jobs:
         with:
           context: .
           push: true
-          # Tags the image with both the Git commit SHA (for GitOps) and 'latest'
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
@@ -69,7 +66,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to commit the updated deployment.yaml back to the repo
+      contents: write
 
     steps:
       - name: Checkout code
@@ -79,21 +76,15 @@ jobs:
 
       - name: Update Kubernetes Deployment YAML
         run: |
-          # Replaces the generic 'image: gist-api:latest' with the newly built GHCR image and exact commit SHA
           NEW_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          # Using lower case for the image name to avoid docker pull issues with uppercase characters
           NEW_IMAGE=$(echo $NEW_IMAGE | tr '[:upper:]' '[:lower:]')
-          
           sed -i "s|image: .*|image: $NEW_IMAGE|g" k8s/deployment.yaml
-          
           echo "Updated k8s/deployment.yaml with image: $NEW_IMAGE"
 
       - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
           git add k8s/deployment.yaml
-          # If there are no changes, this will just gracefully exit without failing
           git commit -m "chore(cd): update image tag to ${{ github.sha }} [skip ci]" || echo "No changes to commit"
           git push
